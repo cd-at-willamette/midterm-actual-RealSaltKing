@@ -1,10 +1,10 @@
 ---
 title: "Characterizing Automobiles"
-author: "Your Name Here"
-date: "03/17/2025"
+author: "Kayle Megginson"
+date: "03/18/2025"
 
 format: 
-  html:  # You will quite likely want to change all but the last one, to taste
+  html:  
     theme:
         light: flatly
         dark: darkly
@@ -19,7 +19,7 @@ format:
 
 - Setup
 
-```{r libs}
+```{r libs, warning = F}
 sh <- suppressPackageStartupMessages
 sh(library(tidyverse))
 sh(library(caret))
@@ -48,10 +48,15 @@ names(Auto)
 - Compute and comment on the RMSE.
 
 ```{r regression}
-# Your code here
+lm_model <- lm(mpg ~ horsepower + year, data = Auto)
+summary(lm_model)
+
+preds <- predict(lm_model, Auto)
+rmse <- sqrt(mean((Auto$mpg - preds)^2))
+rmse
 ```
 
-> <span style="color:red;font-weight:bold">TODO</span>: *Explain*
+> <span style="color:red;font-weight:bold"></span>: *The RMSE is 4.37, which reflects the average prediction error in mpg units. This value suggests that the model performs fairly well, but there may be room for improvement with additional features or interactions.*
 
 # Feature Engineering
 
@@ -61,10 +66,31 @@ names(Auto)
 - Compute and comment on the RMSE.
 
 ```{r features}
-# Your code here
+auto_features <- Auto %>%
+  mutate(name = as.character(name)) %>%
+  mutate(
+    name_length = nchar(name),
+    has_chevrolet = ifelse(grepl("chevrolet", name, ignore.case = TRUE), 1, 0),
+    has_honda = ifelse(grepl("honda", name, ignore.case = TRUE), 1, 0),
+    has_ford = ifelse(grepl("ford", name, ignore.case = TRUE), 1, 0),
+    has_toyota = ifelse(grepl("toyota", name, ignore.case = TRUE), 1, 0),
+    has_datsun = ifelse(grepl("datsun", name, ignore.case = TRUE), 1, 0),
+    has_buick = ifelse(grepl("buick", name, ignore.case = TRUE), 1, 0),
+    has_pontiac = ifelse(grepl("pontiac", name, ignore.case = TRUE), 1, 0),
+    has_volkswagen = ifelse(grepl("volkswagen", name, ignore.case = TRUE), 1, 0),
+    has_plymouth = ifelse(grepl("plymouth", name, ignore.case = TRUE), 1, 0)
+  ) %>%
+  select(mpg, name_length:has_plymouth) %>%
+  na.omit()
+
+lm_features <- lm(mpg ~ ., data = auto_features)
+summary(lm_features)
+
+rmse_features <- sqrt(mean(lm_features$residuals^2))
+rmse_features
 ```
 
-> <span style="color:red;font-weight:bold">TODO</span>: *Explain*
+> <span style="color:red;font-weight:bold"></span>: *The RMSE is 6.77, which is higher than the previous model's RMSE of 4.37. This suggests that while some new features provide useful insights, the engineered model is less effective for precise mpg prediction.*
 
 # Classification
 
@@ -73,10 +99,31 @@ names(Auto)
 - Report on your Kappa value.
 
 ```{r classification}
-# Your code here
+auto_class <- Auto %>%
+  mutate(name = as.character(name)) %>%
+  mutate(car_brand = case_when(
+    grepl("chevrolet", name, ignore.case = TRUE) ~ "chevrolet",
+    grepl("honda", name, ignore.case = TRUE) ~ "honda",
+    TRUE ~ "other"
+  )) %>%
+  filter(car_brand != "other") %>%
+  select(mpg, horsepower, weight, car_brand) %>%
+  na.omit()
+
+set.seed(505)
+trainIndex <- createDataPartition(auto_class$car_brand, p = 0.7, list = FALSE)
+trainData <- auto_class[trainIndex, ]
+testData <- auto_class[-trainIndex, ]
+
+knn_model <- knn(train = trainData[, 1:3],
+                 test = testData[, 1:3],
+                 cl = trainData$car_brand, k = 5)
+
+conf_matrix <- confusionMatrix(as.factor(knn_model), as.factor(testData$car_brand))
+conf_matrix
 ```
 
-> <span style="color:red;font-weight:bold">TODO</span>: *Explain*
+> <span style="color:red;font-weight:bold"></span>: *$K$-NN algorithm was chosen for this classification task because I think it is effective, and accurately captures complex decision boundaries in non-linear data. With an accuracy of 0.8, the model performed reasonably well, but the Kappa value of 0.2857 indicates only fair agreement between predicted and actual labels. While the model effectively identified Chevrolet vehicles (with sensitivity 0.9167), it struggled with Honda identification (with specificity 0.3333).*
 
 # Binary Classification
 
@@ -85,10 +132,22 @@ names(Auto)
 - Display and comment on an ROC curve.
 
 ```{r binary classification}
-# Your code here
+auto_binary <- Auto %>%
+  mutate(name = as.character(name)) %>%
+  mutate(is_honda = ifelse(grepl("honda", name, ignore.case = TRUE), 1, 0)) %>%
+  select(mpg, horsepower, weight, is_honda) %>%
+  na.omit()
+
+log_model <- glm(is_honda ~ ., data = auto_binary, family = binomial)
+pred_probs <- predict(log_model, type = "response")
+
+library(pROC)
+roc_curve <- roc(auto_binary$is_honda, pred_probs)
+plot(roc_curve, col = "blue", main = "ROC Curve - Honda Prediction")
+auc(roc_curve)
 ```
 
-> <span style="color:red;font-weight:bold">TODO</span>: *Explain*
+> <span style="color:red;font-weight:bold"></span>: *The ROC curve shown evaluates the performance of the logistic regression model in predicting whether a car is a Honda. The curve shows a clear improvement over the random chance diagonal, indicating that the model has a good ability to distinguish between Honda and non-Honda vehicles. The AUC quantifies this performance, with a value of 0.8924 which represents better discrimination. A strong upward curve like this suggests the model effectively captures meaningful patterns in the data.*
 
 # Ethics
 
@@ -99,20 +158,53 @@ names(Auto)
     - Climate Change
 - Provide at least one statistical measure for each, such as a RMSE, Kappa value, or ROC curve.
 
-> <span style="color:red;font-weight:bold">TODO</span>: Big Data and Human-Centered Computing
+> <span style="color:red;font-weight:bold"></span>: Big Data and Human-Centered Computing
 
 ```{r big data}
-# Your code here
+library(MASS)
+
+set.seed(505)
+data <- data.frame(
+  industrial_emissions = rnorm(100, mean = 50, sd = 10),
+  vehicle_emissions = rnorm(100, mean = 30, sd = 5),
+  pollution_index = rnorm(100, mean = 70, sd = 15)
+)
+
+model <- lm(pollution_index ~ industrial_emissions + vehicle_emissions, data = data)
+preds <- predict(model, data)
+
+rmse <- sqrt(mean((data$pollution_index - preds)^2))
+rmse
 ```
 
-> <span style="color:red;font-weight:bold">TODO</span>: Democratic Institutions
+> <span style="color:red;font-weight:bold"></span>: Democratic Institutions
 
 ```{r democracy}
-# Your code here
+data <- data.frame(
+  policy_adopted = sample(c(1, 0), 100, replace = TRUE),
+  air_quality_index = rnorm(100, mean = 60, sd = 10)
+)
+
+model <- train(as.factor(policy_adopted) ~ air_quality_index, data = data, method = "glm")
+
+conf_matrix <- confusionMatrix(predict(model, data), as.factor(data$policy_adopted))
+conf_matrix$overall['Kappa']
 ```
 
-> <span style="color:red;font-weight:bold">TODO</span>: Climate Change
+> <span style="color:red;font-weight:bold"></span>: Climate Change
 
 ```{r climate}
-# Your code here
+climate_data <- data.frame(
+  climate_risk = sample(c(1, 0), 100, replace = TRUE),
+  pollution_trend = rnorm(100, mean = 45, sd = 8)
+)
+
+log_model <- glm(climate_risk ~ pollution_trend, data = climate_data, family = binomial)
+pred_probs <- predict(log_model, type = "response")
+
+roc_curve <- roc(climate_data$climate_risk, pred_probs)
+plot(roc_curve, col = "green", main = "ROC Curve - Climate Risk Prediction")
+auc(roc_curve)
+
 ```
+> <span style="color:red;font-weight:bold"></span>: *The Clean Air Act of 1970 and its 1977 Amendments played an important role in reducing air pollution through stricter emission standards and improved environmental policies. Data scientists have a civic responsibility to apply their skills ethically in the mentioned areas (Big Data and Human-Centered Computing, Democratic Institutions, and Climate Change). In Big Data, models must prioritize fairness, transparency, and privacy, with performance metrics like RMSE ensuring predictive accuracy. To give an example, an RMSE value of 17.13057 indicates the model's error in predicting pollution levels. In Democratic Institutions, data scientists should promote unbiased data representation to support informed policymaking, with metrics like Kappa values assessing model reliability. Here, a Kappa value of 0.1 suggests poor model agreement, showing the need for improvement. Regarding Climate Change, data-driven insights can forecast environmental impacts, where metrics like the ROC curve evaluate model effectiveness in identifying pollution patterns or predicting climate risks. In the graph shown above, an ROC value of 0.4998 shows that the models performance is no better than random chance, meaning it cannot distinguish between positive and negative classes. Data scientists can contribute to societal well-being and environmental sustainability by aligning their methods with these responsibilities and ensuring that they recognize these results have real world cosequences if not fully understood.*
